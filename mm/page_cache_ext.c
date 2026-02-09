@@ -8,19 +8,24 @@
 
 // extern struct bpf_struct_ops bpf_page_cache_ext_ops;
 static const struct btf_type *page_cache_ext_eviction_ctx_type;
+static const struct btf_type *page_cache_ext_prefetch_ctx_type;
+static const struct btf_type *page_cache_ext_folio_desc;
 struct page_cache_ext_ops *page_cache_ext_ops = NULL;
+
+#define BTF_FIND(name) {\
+		u32 type_id = btf_find_by_name_kind(btf, #name, BTF_KIND_STRUCT);\
+		if (type_id < 0) {\
+			pr_err("page_cache_ext: failed to find struct %s\n", #name);\
+			return -EINVAL;\
+		}\
+		name##_type = btf_type_by_id(btf, type_id);\
+	}
 
 static int bpf_page_cache_ext_init(struct btf *btf)
 {
-	u32 type_id;
-
-	type_id = btf_find_by_name_kind(btf, "page_cache_ext_eviction_ctx",
-					BTF_KIND_STRUCT);
-	if (type_id < 0) {
-		pr_err("page_cache_ext: failed to find struct page_cache_ext_eviction_ctx\n");
-		return -EINVAL;
-	}
-	page_cache_ext_eviction_ctx_type = btf_type_by_id(btf, type_id);
+	BTF_FIND(page_cache_ext_eviction_ctx);
+	BTF_FIND(page_cache_ext_prefetch_ctx);
+	BTF_FIND(page_cache_ext_folio_desc);
 	return 0;
 }
 
@@ -61,15 +66,22 @@ static int bpf_page_cache_ext_btf_struct_access(struct bpf_verifier_log *log,
 
 	t = btf_type_by_id(reg->btf, reg->btf_id);
 	if (t == page_cache_ext_eviction_ctx_type) {
-		if (off + size > sizeof(struct page_cache_ext_eviction_ctx)) {
-			bpf_log(log,
-				"out of bounds access at off %d with size %d\n",
-				off, size);
-			return -EACCES;
+		if (off + size <= sizeof(struct page_cache_ext_eviction_ctx)) {
+			return SCALAR_VALUE;
 		}
-		return SCALAR_VALUE;
+	} else if (t == page_cache_ext_prefetch_ctx_type) {
+		if (off + size <= sizeof(struct page_cache_ext_prefetch_ctx)) {
+			return SCALAR_VALUE;
+		}
+	} else if (t == page_cache_ext_folio_desc_type) {
+		if (off + size <= sizeof(struct page_cache_ext_folio_desc)) {
+			return SCALAR_VALUE;
+		}
 	}
 
+	bpf_log(log,
+		"out of bounds access at off %d with size %d\n",
+		off, size);
 	return -EACCES;
 }
 
