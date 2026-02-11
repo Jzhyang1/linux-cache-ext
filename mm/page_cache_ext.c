@@ -8,8 +8,6 @@
 
 // extern struct bpf_struct_ops bpf_page_cache_ext_ops;
 static const struct btf_type *page_cache_ext_eviction_ctx_type;
-static const struct btf_type *page_cache_ext_prefetch_ctx_type;
-static const struct btf_type *page_cache_ext_folio_desc;
 struct page_cache_ext_ops *page_cache_ext_ops = NULL;
 
 #define BTF_FIND(name) {\
@@ -24,8 +22,6 @@ struct page_cache_ext_ops *page_cache_ext_ops = NULL;
 static int bpf_page_cache_ext_init(struct btf *btf)
 {
 	BTF_FIND(page_cache_ext_eviction_ctx);
-	BTF_FIND(page_cache_ext_prefetch_ctx);
-	BTF_FIND(page_cache_ext_folio_desc);
 	return 0;
 }
 
@@ -67,14 +63,6 @@ static int bpf_page_cache_ext_btf_struct_access(struct bpf_verifier_log *log,
 	t = btf_type_by_id(reg->btf, reg->btf_id);
 	if (t == page_cache_ext_eviction_ctx_type) {
 		if (off + size <= sizeof(struct page_cache_ext_eviction_ctx)) {
-			return SCALAR_VALUE;
-		}
-	} else if (t == page_cache_ext_prefetch_ctx_type) {
-		if (off + size <= sizeof(struct page_cache_ext_prefetch_ctx)) {
-			return SCALAR_VALUE;
-		}
-	} else if (t == page_cache_ext_folio_desc_type) {
-		if (off + size <= sizeof(struct page_cache_ext_folio_desc)) {
 			return SCALAR_VALUE;
 		}
 	}

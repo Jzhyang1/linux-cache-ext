@@ -446,51 +446,6 @@ static void folio_inc_refs(struct folio *folio)
 }
 #endif /* CONFIG_LRU_GEN */
 
-/*
- * @pcext_ops: The page_cache_ext eBPF structure; must be non-null.
- * @memcg: also non-null
- *
- * page_cache_ext
- * Begins prefetching folios based on response from eBPF function
- * 
- * May fail in the following cases:
- * - No permissions (TODO)
- * - The folio is already in the cache (TODO)
- * - The block in the file is "complex" e.g. has holes
- * - There is not enough space to store the folio (TODO)
- * - The folio is too small and the kernel decides the cost is too high (TODO)
- */
-void page_cache_ext_prefetch_folios(struct page_cache_ext_ops *pcext_ops, struct mem_cgroup *memcg) {
-	struct page_cache_ext_prefetch_ctx ctx;
-	memset(&ctx, 0, sizeof(ctx));
-	
-	pcext_ops->prefetch_folios(&ctx, memcg);
-
-	for (int iter_guard_count = 0; iter_guard_count < MAX_PREFETCH_ITER; iter_guard_count++) {
-		for (int i = 0; i < ctx.nr_folios_to_prefetch; i++) {
-			struct page_cache_ext_folio_desc *untrusted_folio_desc = ctx.folios_to_prefetch + i;
-			// TODO do trust checks
-			struct page_cache_ext_folio_desc *folio_desc = untrusted_folio_desc;
-			for (unsigned long j = 0; j < folio_desc->nr_folios; j++) {
-				// TODO: make sure the following line is going to read from the disk asynchronously
-				struct folio *folio = filemap_get_folio(folio_desc->mapping, folio_desc->index);
-
-				// TODO: the following checks that the folio is in the lru list for folios
-				// does that mean that they need to be paged in for us to check for validity?
-				if (folio == NULL) {
-					pr_debug("page_cache_ext: Folio not prefetched, index: %x!\n", folio_desc->index);
-					continue;
-				}
-
-				// TODO: This seems to be called within filemap_get_folio, does that mean that we're done here?
-				// // TODO: does this insert a new address->entry mapping or does it add back 
-				// //  actual memory-backed pages? Also what's index and gfp?
-				// filemap_add_folio(folio_desc->mapping, folio, folio_desc->index, 0);
-			}
-		}
-		if (!ctx.prefetch_more) break;
-	}
-}
 
 /*
  * Mark a page as having seen activity.
@@ -510,13 +465,7 @@ void folio_mark_accessed(struct folio *folio)
 	struct page_cache_ext_ops *pcext_ops = get_page_cache_ext_ops(memcg);
 
 	if (pcext_ops != NULL && pcext_ops->folio_accessed != NULL) {
-		bool to_prefetch;
-		pcext_ops->folio_accessed(folio, &to_prefetch);
-
-		if (to_prefetch) {
-			// TODO: consider making this asynchronous
-			page_cache_ext_prefetch_folios(pcext_ops, memcg);
-		}
+		pcext_ops->folio_accessed(folio);
 	}
 
 	if (lru_gen_enabled()) {

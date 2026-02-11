@@ -1385,32 +1385,14 @@ struct page_cache_ext_eviction_ctx {
 	s64 scores[32];
 };
 
-struct page_cache_ext_folio_desc {
-	struct address_space *mapping;	/* The mappable/cachable object backing our folio. */
-	pgoff_t index;				/* Our offset within the inode. */
-	unsigned long nr_folios;	/* The number of consecutive folios to fetch */
-};
-
-#define MAX_PREFETCH_ITER 100
-struct page_cache_ext_prefetch_ctx {
-	// Output
-	unsigned long nr_folios_to_prefetch;
-	struct page_cache_ext_folio_desc folios_to_prefetch[32];
-	// s64 scores[32];	// Higher score means more likely to be accessed in the near future. 
-	//					// The unit is arbitrary and only meaningful for comparison among candidates.
-	int prefetch_more;	// 0 if no more to prefetch; will be set to 0 at the first call 
-						// but previous results will be passed to the next iterations; will stop after MAX_PREFETCH_ITER iterations.
-};
-
 // TODO: How can I make only some fields page_cache_ext_eviction_ctx writeable?
 struct page_cache_ext_ops {
 	// Implement bpf_verifier_ops
 	s32  (*init)(struct mem_cgroup *memcg);
 	void (*evict_folios)(struct page_cache_ext_eviction_ctx *ctx, struct mem_cgroup *memcg);
 	void (*folio_added)(struct folio *folio);
-	void (*folio_accessed)(struct folio *folio, bool* prefetch);
+	void (*folio_accessed)(struct folio *folio);
 	void (*folio_evicted)(struct folio *folio);
-	void (*prefetch_folios)(struct page_cache_ext_prefetch_ctx *ctx, struct mem_cgroup *memcg)
 	// TODO: Add name?
 };
 
