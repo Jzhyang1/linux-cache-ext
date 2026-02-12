@@ -724,15 +724,84 @@ static const struct btf_kfunc_id_set cache_ext_kfunc_set_registry_ops = {
 	.set = &cache_ext_registry_ops,
 };
 
+/******************************************************************************
+ * address space (mapping) kPtrs **********************************************
+ *****************************************************************************/
+
+__bpf_kfunc struct address_space *bpf_cache_ext_mapping_acquire(struct address_space *mapping) {
+    if (mapping && igrab(mapping->host))
+        return mapping;
+    return NULL;
+}
+
+__bpf_kfunc void bpf_cache_ext_mapping_release(struct address_space *mapping) {
+    if (mapping)
+        iput(mapping->host);
+}
+
+BTF_SET8_START(cache_ext_mapping_ops)
+BTF_ID_FLAGS(func, bpf_cache_ext_mapping_acquire, KF_ACQUIRE)
+BTF_ID_FLAGS(func, bpf_cache_ext_mapping_release, KF_RELEASE)
+BTF_SET8_END(cache_ext_mapping_ops)
+
+static const struct btf_kfunc_id_set cache_ext_kfunc_mapping_ops = {
+	.owner = THIS_MODULE,
+	.set = &cache_ext_mapping_ops,
+};
+
+
+/******************************************************************************
+ * prefetch a folio ***********************************************************
+ *****************************************************************************/
+
+__bpf_kfunc void bpf_cache_ext_prefetch(struct address_space *mapping, pgoff_t index, unsigned long nr_pages) {
+    if (mapping == NULL) return;
+
+	// We need a readahead_control. 
+	// Note: Since we don't have a 'struct file', 
+	// we use a local ra_state.
+	struct file_ra_state ra = {0};
+	file_ra_state_init(&ra, mapping);
+
+	struct readahead_control ractl = {
+		.mapping = mapping,
+		.ra = &ra,
+		._index = index,
+	};
+
+	// Call the standard engine
+	page_cache_async_ra(&ractl, NULL, nr_pages);
+
+	// RELEASE the reference BPF acquired
+	bpf_cache_ext_mapping_release(mapping);
+}
+
+BTF_SET8_START(cache_ext_prefetch_ops)
+BTF_ID_FLAGS(func, bpf_cache_ext_prefetch, KF_SLEEPABLE)
+BTF_SET8_END(cache_ext_prefetch_ops)
+
+static const struct btf_kfunc_id_set cache_ext_kfunc_prefetch_ops = {
+	.owner = THIS_MODULE,
+	.set = &cache_ext_prefetch_ops,
+};
+
+
 static int __init register_cache_ext_kfuncs(void)
 {
 	int ret;
 
-	if ((ret = register_btf_kfunc_id_set(BPF_PROG_TYPE_STRUCT_OPS,
-					     &cache_ext_kfunc_set_list_ops)) ||
+	if ((ret = register_btf_kfunc_id_set(
+			BPF_PROG_TYPE_STRUCT_OPS,
+			&cache_ext_kfunc_set_list_ops)) ||
 	    (ret = register_btf_kfunc_id_set(
-		     BPF_PROG_TYPE_STRUCT_OPS,
-		     &cache_ext_kfunc_set_registry_ops))) {
+		    BPF_PROG_TYPE_STRUCT_OPS,
+		    &cache_ext_kfunc_set_registry_ops)) ||
+		(ret = register_btf_kfunc_id_set(
+			BPF_PROG_TYPE_STRUCT_OPS,
+			&cache_ext_kfunc_mapping_ops)) ||
+		(ret = register_btf_kfunc_id_set(
+			BPF_PROG_TYPE_STRUCT_OPS,
+			&cache_ext_kfunc_prefetch_ops))) {
 		pr_err("cache_ext: failed to register kfunc sets (%d)\n", ret);
 		return ret;
 	}
