@@ -755,8 +755,8 @@ static const struct btf_kfunc_id_set cache_ext_kfunc_mapping_ops = {
  * prefetch a folio ***********************************************************
  *****************************************************************************/
 
-__bpf_kfunc void bpf_cache_ext_prefetch(struct address_space *mapping, pgoff_t index, unsigned long nr_pages) {
-    if (mapping == NULL) return;
+__bpf_kfunc int bpf_cache_ext_prefetch(struct address_space *mapping, pgoff_t index, unsigned long nr_pages) {
+    if (mapping == NULL) return -EINVAL;
 
 	// We need a readahead_control. 
 	// Note: Since we don't have a 'struct file', 
@@ -771,14 +771,16 @@ __bpf_kfunc void bpf_cache_ext_prefetch(struct address_space *mapping, pgoff_t i
 	};
 
 	// Call the standard engine
-	page_cache_async_ra(&ractl, NULL, nr_pages);
+	// page_cache_async_ra(&ractl, NULL, nr_pages);
+	page_cache_ra_unbounded(&ractl, nr_pages, 0);
 
 	// RELEASE the reference BPF acquired
 	bpf_cache_ext_mapping_release(mapping);
+	return 0;
 }
 
 BTF_SET8_START(cache_ext_prefetch_ops)
-BTF_ID_FLAGS(func, bpf_cache_ext_prefetch, KF_SLEEPABLE)
+BTF_ID_FLAGS(func, bpf_cache_ext_prefetch, KF_SLEEPABLE | KF_TRUSTED_ARGS)
 BTF_SET8_END(cache_ext_prefetch_ops)
 
 static const struct btf_kfunc_id_set cache_ext_kfunc_prefetch_ops = {
