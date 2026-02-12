@@ -11,6 +11,7 @@
 #include <linux/cache_ext.h>
 #include <linux/btf.h>
 #include <linux/sort.h>
+#include <linux/pagemap.h>
 
 /******************************************************************************
  * Linked List ****************************************************************
