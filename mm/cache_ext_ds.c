@@ -755,8 +755,19 @@ static const struct btf_kfunc_id_set cache_ext_kfunc_mapping_ops = {
  * prefetch a folio ***********************************************************
  *****************************************************************************/
 
-__bpf_kfunc void bpf_cache_ext_prefetch(struct address_space *mapping, pgoff_t index, unsigned long nr_pages) {
-    if (mapping == NULL) return;
+__bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned long nr_pages) {
+    struct address_space *mapping = (struct address_space *)(unsigned long)mapping_ptr;
+    
+	// TODO we are currently bypassing the eBPF verifier's pointer checks by using u64. 
+	// We should add proper support for struct address_space * in the verifier.
+	// However, in the meantime we will use these checks to ensure that the pointer is at least somewhat valid.
+    
+	// Very basic sanity check
+    if (!mapping || ((unsigned long)mapping < PAGE_OFFSET))
+        return;
+    // Check if the mapping host still looks like an inode
+    if (!mapping->host || !mapping->host->i_sb)
+        return;
 
 	// We need a readahead_control. 
 	// Note: Since we don't have a 'struct file', 
