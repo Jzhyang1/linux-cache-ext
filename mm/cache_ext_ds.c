@@ -778,7 +778,7 @@ __bpf_kfunc void bpf_cache_ext_prefetch(struct address_space *mapping, pgoff_t i
 }
 
 BTF_SET8_START(cache_ext_prefetch_ops)
-BTF_ID_FLAGS(func, bpf_cache_ext_prefetch, KF_SLEEPABLE | KF_)
+BTF_ID_FLAGS(func, bpf_cache_ext_prefetch, KF_SLEEPABLE)
 BTF_SET8_END(cache_ext_prefetch_ops)
 
 static const struct btf_kfunc_id_set cache_ext_kfunc_prefetch_ops = {
