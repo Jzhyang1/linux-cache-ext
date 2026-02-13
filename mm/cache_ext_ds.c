@@ -12,6 +12,7 @@
 #include <linux/btf.h>
 #include <linux/sort.h>
 #include <linux/pagemap.h>
+#include "internal.h"
 
 /******************************************************************************
  * Linked List ****************************************************************
@@ -781,8 +782,9 @@ __bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned
 		._index = index,
 	};
 
-	// Call the standard engine
-	page_cache_async_ra(&ractl, NULL, nr_pages);
+	// This should force the page cache to read the pages into memory
+	force_page_cache_ra(&ractl, nr_pages);
+	// page_cache_sync_readahead(mapping, &ra, NULL, index, nr_pages);
 
 	// RELEASE the reference BPF acquired
 	bpf_cache_ext_mapping_release(mapping);
