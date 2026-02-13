@@ -778,7 +778,7 @@ __bpf_kfunc void bpf_cache_ext_prefetch(struct address_space *mapping, pgoff_t i
 }
 
 BTF_SET8_START(cache_ext_prefetch_ops)
-BTF_ID_FLAGS(func, bpf_cache_ext_prefetch, KF_SLEEPABLE)
+BTF_ID_FLAGS(func, bpf_cache_ext_prefetch, KF_SLEEPABLE | KF_)
 BTF_SET8_END(cache_ext_prefetch_ops)
 
 static const struct btf_kfunc_id_set cache_ext_kfunc_prefetch_ops = {
@@ -801,7 +801,7 @@ static int __init register_cache_ext_kfuncs(void)
 			BPF_PROG_TYPE_STRUCT_OPS,
 			&cache_ext_kfunc_mapping_ops)) ||
 		(ret = register_btf_kfunc_id_set(
-			BPF_PROG_TYPE_STRUCT_OPS,
+			BPF_PROG_TYPE_STRUCT_OPS | BPF_PROG_TYPE_SYSCALL,
 			&cache_ext_kfunc_prefetch_ops))) {
 		pr_err("cache_ext: failed to register kfunc sets (%d)\n", ret);
 		return ret;
