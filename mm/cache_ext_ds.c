@@ -770,21 +770,14 @@ __bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned
     if (!mapping->host || !mapping->host->i_sb)
         return;
 
-	// We need a readahead_control. 
-	// Note: Since we don't have a 'struct file', 
-	// we use a local ra_state.
-	struct file_ra_state ra = {0};
-	file_ra_state_init(&ra, mapping);
-
-	struct readahead_control ractl = {
-		.mapping = mapping,
-		.ra = &ra,
-		._index = index,
-	};
-
-	// This should force the page cache to read the pages into memory
-	force_page_cache_ra(&ractl, nr_pages);
-	// page_cache_sync_readahead(mapping, &ra, NULL, index, nr_pages);
+	struct file_ra_state ra;
+	// Initialize, but realize 'ra' is local and disappears after this call
+    file_ra_state_init(&ra, mapping);
+    
+    // page_cache_sync_readahead is often more reliable than 'force' 
+    // because it handles the creation of the readahead_control internally 
+    // and triggers the actual read_pages() call for the address space.
+    page_cache_sync_readahead(mapping, &ra, NULL, index, nr_pages);
 
 	// RELEASE the reference BPF acquired
 	bpf_cache_ext_mapping_release(mapping);
