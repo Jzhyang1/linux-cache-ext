@@ -13,7 +13,6 @@
 #include <linux/sort.h>
 #include <linux/pagemap.h>
 #include <linux/mm.h>
-#include <linux/fs.h>
 #include <trace/events/filemap.h>
 #include "internal.h"
 
