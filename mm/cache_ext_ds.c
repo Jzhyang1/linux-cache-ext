@@ -759,7 +759,7 @@ static const struct btf_kfunc_id_set cache_ext_kfunc_mapping_ops = {
  * prefetch a folio ***********************************************************
  *****************************************************************************/
 
- static int read_pages_unsafe(struct readahead_control *rac) {
+ static void read_pages_unsafe(struct readahead_control *rac) {
 	const struct address_space_operations *aops = rac->mapping->a_ops;
 	struct folio *folio;
 
