@@ -13,6 +13,7 @@
 #include <linux/sort.h>
 #include <linux/pagemap.h>
 #include <linux/mm.h>
+#include <trace/events/filemap.h>
 #include "internal.h"
 
 /******************************************************************************
@@ -810,7 +811,8 @@ __bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned
     if (!mapping->host || !mapping->host->i_sb)
         return;
 
-	DEFINE_READAHEAD(ractl, NULL, NULL, mapping, index);
+	DEFINE_READAHEAD(ractl_obj, NULL, NULL, mapping, index);
+	struct readahead_control *ractl = &ractl_obj;
 
 	// force_page_ra
 	struct inode *inode = mapping->host;
@@ -878,8 +880,6 @@ __bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned
 			continue;
 		}
 		trace_mm_filemap_add_to_page_cache_prefetch(folio);
-		if (i == nr_to_read - lookahead_size)
-			folio_set_readahead(folio);
 		ractl->_workingset |= folio_test_workingset(folio);
 		ractl->_nr_pages++;
 	}
