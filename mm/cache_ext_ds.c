@@ -12,6 +12,7 @@
 #include <linux/btf.h>
 #include <linux/sort.h>
 #include <linux/pagemap.h>
+#include <linux/mm.h>
 #include "internal.h"
 
 /******************************************************************************
@@ -756,7 +757,46 @@ static const struct btf_kfunc_id_set cache_ext_kfunc_mapping_ops = {
  * prefetch a folio ***********************************************************
  *****************************************************************************/
 
-__bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned long nr_pages) {
+ static int read_pages_unsafe(struct readahead_control *rac) {
+	const struct address_space_operations *aops = rac->mapping->a_ops;
+	struct folio *folio;
+	struct blk_plug plug;
+
+	if (unlikely(rac->_workingset))
+		psi_memstall_enter(&rac->_pflags);
+	blk_start_plug(&plug);
+
+	if (aops->readahead) {
+		aops->readahead(rac);
+		/*
+		 * Clean up the remaining folios.  The sizes in ->ra
+		 * may be used to size the next readahead, so make sure
+		 * they accurately reflect what happened.
+		 */
+		while ((folio = readahead_folio(rac)) != NULL) {
+			unsigned long nr = folio_nr_pages(folio);
+
+			folio_get(folio);
+			rac->ra->size -= nr;
+			if (rac->ra->async_size >= nr) {
+				rac->ra->async_size -= nr;
+				filemap_remove_folio(folio);
+			}
+			folio_unlock(folio);
+			folio_put(folio);
+		}
+	} else {
+		while ((folio = readahead_folio(rac)) != NULL)
+			aops->read_folio(rac->file, folio);
+	}
+
+	blk_finish_plug(&plug);
+	if (unlikely(rac->_workingset))
+		psi_memstall_leave(&rac->_pflags);
+	rac->_workingset = false;
+ }
+
+__bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned long nr_to_read) {
     struct address_space *mapping = (struct address_space *)(unsigned long)mapping_ptr;
     
 	// TODO we are currently bypassing the eBPF verifier's pointer checks by using u64. 
@@ -770,17 +810,93 @@ __bpf_kfunc void bpf_cache_ext_prefetch(u64 mapping_ptr, pgoff_t index, unsigned
     if (!mapping->host || !mapping->host->i_sb)
         return;
 
-	struct file_ra_state ra;
-	// Initialize, but realize 'ra' is local and disappears after this call
-    file_ra_state_init(&ra, mapping);
-    
-    // page_cache_sync_readahead is often more reliable than 'force' 
-    // because it handles the creation of the readahead_control internally 
-    // and triggers the actual read_pages() call for the address space.
-    page_cache_sync_readahead(mapping, &ra, NULL, index, nr_pages);
+	DEFINE_READAHEAD(ractl, NULL, NULL, mapping, index);
+
+	// force_page_ra
+	struct inode *inode = mapping->host;
+	loff_t isize = i_size_read(inode);
+	pgoff_t end_index;	/* The last page we want to read */
+
+	if (isize == 0)
+		return;
+
+	end_index = (isize - 1) >> PAGE_SHIFT;
+	if (index > end_index)
+		return;
+
+	/* Don't read past the page containing the last byte of the file */
+	if (nr_to_read > end_index - index)
+		nr_to_read = end_index - index + 1;
+
+	// ra_unbounded
+	gfp_t gfp_mask = readahead_gfp_mask(mapping);
+	unsigned long i;
+
+	/*
+	* Partway through the readahead operation, we will have added
+	* locked pages to the page cache, but will not yet have submitted
+	* them for I/O.  Adding another page may need to allocate memory,
+	* which can trigger memory reclaim.  Telling the VM we're in
+	* the middle of a filesystem operation will cause it to not
+	* touch file-backed pages, preventing a deadlock.  Most (all?)
+	* filesystems already specify __GFP_NOFS in their mapping's
+	* gfp_mask, but let's be explicit here.
+	*/
+	unsigned int nofs = memalloc_nofs_save();
+
+	filemap_invalidate_lock_shared(mapping);
+	/*
+	* Preallocate as many pages as we will need.
+	*/
+	for (i = 0; i < nr_to_read; i++) {
+		struct folio *folio = xa_load(&mapping->i_pages, index + i);
+
+		if (folio && !xa_is_value(folio)) {
+			/*
+			* Page already present?  Kick off the current batch
+			* of contiguous pages before continuing with the
+			* next batch.  This page may be the one we would
+			* have intended to mark as Readahead, but we don't
+			* have a stable reference to this page, and it's
+			* not worth getting one just for that.
+			*/
+			read_pages_unsafe(ractl);
+			ractl->_index++;
+			i = ractl->_index + ractl->_nr_pages - index - 1;
+			continue;
+		}
+
+		folio = filemap_alloc_folio(gfp_mask, 0);
+		if (!folio)
+			break;
+		if (filemap_add_folio(mapping, folio, index + i,
+					gfp_mask) < 0) {
+			folio_put(folio);
+			read_pages_unsafe(ractl);
+			ractl->_index++;
+			i = ractl->_index + ractl->_nr_pages - index - 1;
+			continue;
+		}
+		trace_mm_filemap_add_to_page_cache_prefetch(folio);
+		if (i == nr_to_read - lookahead_size)
+			folio_set_readahead(folio);
+		ractl->_workingset |= folio_test_workingset(folio);
+		ractl->_nr_pages++;
+	}
+
+	/*
+	* Now start the IO.  We ignore I/O errors - if the folio is not
+	* uptodate then the caller will launch read_folio again, and
+	* will then handle the error.
+	*/
+	read_pages_unsafe(ractl);
+	filemap_invalidate_unlock_shared(mapping);
+	memalloc_nofs_restore(nofs);
+	// end ra_unbounded
+	// end force_page_ra
 
 	// RELEASE the reference BPF acquired
-	bpf_cache_ext_mapping_release(mapping);
+	// bpf_cache_ext_mapping_release(mapping);
 }
 
 BTF_SET8_START(cache_ext_prefetch_ops)
