@@ -762,11 +762,6 @@ static const struct btf_kfunc_id_set cache_ext_kfunc_mapping_ops = {
  static int read_pages_unsafe(struct readahead_control *rac) {
 	const struct address_space_operations *aops = rac->mapping->a_ops;
 	struct folio *folio;
-	struct blk_plug plug;
-
-	if (unlikely(rac->_workingset))
-		psi_memstall_enter(&rac->_pflags);
-	blk_start_plug(&plug);
 
 	if (aops->readahead) {
 		aops->readahead(rac);
@@ -792,9 +787,6 @@ static const struct btf_kfunc_id_set cache_ext_kfunc_mapping_ops = {
 			aops->read_folio(rac->file, folio);
 	}
 
-	blk_finish_plug(&plug);
-	if (unlikely(rac->_workingset))
-		psi_memstall_leave(&rac->_pflags);
 	rac->_workingset = false;
  }
 
