@@ -1385,6 +1385,15 @@ struct cache_ext_eviction_ctx {
 	s64 scores[32];
 };
 
+struct cache_ext_prefetch_ctx {
+	// Input
+	unsigned long requested_nr_folios;	// actual number requested, not the prefetch
+	// Output
+	unsigned long nr_folios_to_readahead; // normal sequential readahead
+	pgoff_t extra_page_to_prefetch;		// page offset within the file
+	unsigned long nr_pages_to_prefetch;	// number of pages to prefetch starting from extra_page_to_prefetch
+};
+
 struct cache_ext_admission_ctx {
 	u64 ino;
 	u64 offset;
@@ -1400,6 +1409,8 @@ struct cache_ext_ops {
 	void (*folio_accessed)(struct folio *folio);
 	void (*folio_evicted)(struct folio *folio);
 	bool (*admit_folio)(struct cache_ext_admission_ctx *ctx);
+	// prefetch_folios accepts the page accessed that triggered the prefetch as an argument
+	void (*prefetch_folios)(struct cache_ext_prefetch_ctx *ctx, struct mem_cgroup *memcg, struct folio *folio);
 	// TODO: Add name?
 };
 

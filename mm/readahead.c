@@ -606,11 +606,37 @@ static void ondemand_readahead(struct readahead_control *ractl,
 		if (!start || start - index > max_pages)
 			return;
 
-		ra->start = start;
-		ra->size = start - index;	/* old async_size */
-		ra->size += req_size;
-		ra->size = get_next_ra_size(ra, max_pages);
-		ra->async_size = ra->size;
+		/*
+		 * possibly came from prefetching by cache_ext
+		 * Query cache_ext for next prefetch targets
+		 */
+		struct mem_cgroup *memcg = folio_memcg(folio);
+		struct cache_ext_ops *pcext_ops = get_cache_ext_ops(memcg);
+
+		if (pcext_ops && pcext_ops->prefetch_folios) {
+			struct cache_ext_prefetch_ctx ctx = { req_size, 0 };
+			pcext_ops->prefetch_folios(&ctx, memcg, folio);
+
+			// directly read the requested pages
+			ra->start = ctx.extra_page_to_prefetch;
+			ra->size = ctx.nr_pages_to_prefetch;
+			ra->async_size = ctx.nr_pages_to_prefetch;
+			ractl->_index = ra->start;
+			page_cache_ra_order(ractl, ra, order);
+
+			ra->start = start;
+			if (ctx.nr_folios_to_readahead > 32) {
+				ctx.nr_folios_to_readahead = 32;	// put a cap on readahead size
+			}
+			ra->size = ctx.nr_folios_to_readahead;
+			ra->async_size = ctx.nr_folios_to_readahead;
+		} else {
+			ra->start = start;
+			ra->size = start - index;	/* old async_size */
+			ra->size += req_size;
+			ra->size = get_next_ra_size(ra, max_pages);
+			ra->async_size = ra->size;
+		}
 		goto readit;
 	}
 
