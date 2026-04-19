@@ -12,6 +12,7 @@
 #include <linux/btf.h>
 #include <linux/sort.h>
 #include <linux/sched.h>
+#include "../kernel/sched/sched.h"
 
 /******************************************************************************
  * Linked List ****************************************************************
