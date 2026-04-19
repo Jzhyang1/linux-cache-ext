@@ -548,6 +548,38 @@ bpf_cache_ext_list_sample(struct mem_cgroup *memcg, u64 list,
 		BUG();
 }
 
+// TODO move this elsewhere
+__bpf_kfunc struct cache_ext_pid_pair
+bpf_cache_ext_get_sched()
+{
+	// gets the first and second items in the current runqueue
+	// returns the PIDs of the items
+	struct rq *rq;
+	struct task_struct *p;
+	unsigned long flags;
+	pid_t first_pid = -1, second_pid = -1;
+	int found = 0;
+	int cpu = get_cpu();
+
+	rq = cpu_rq(cpu);
+	raw_spin_rq_lock_irqsave(rq, flags);
+
+	list_for_each_entry(p, &rq->cfs_tasks, se.group_node) {
+		if (found == 0) {
+			first_pid = task_pid_nr(p);
+			found++;
+		} else {
+			second_pid = task_pid_nr(p);
+			break;
+		}
+	}
+
+	raw_spin_rq_unlock_irqrestore(rq, flags);
+	put_cpu();
+
+	return (struct cache_ext_pid_pair){ first_pid, second_pid };
+}
+
 enum cache_ext_list_ops_type {
 	KF_bpf_cache_ext_list_add,
 	KF_bpf_cache_ext_list_add_tail,
@@ -556,6 +588,8 @@ enum cache_ext_list_ops_type {
 	KF_bpf_cache_ext_list_sample,
 	KF_bpf_cache_ext_list_move,
 	KF_bpf_cache_ext_list_iterate_extended,
+	// TODO move this elsewhere
+	KF_bpf_cache_ext_get_sched,
 };
 
 BTF_SET8_START(cache_ext_list_ops)
@@ -566,6 +600,7 @@ BTF_ID_FLAGS(func, bpf_cache_ext_list_iterate)
 BTF_ID_FLAGS(func, bpf_cache_ext_list_sample)
 BTF_ID_FLAGS(func, bpf_cache_ext_list_move)
 BTF_ID_FLAGS(func, bpf_cache_ext_list_iterate_extended)
+BTF_ID_FLAGS(func, bpf_cache_ext_get_sched)
 BTF_SET8_END(cache_ext_list_ops)
 
 BTF_ID_LIST(cache_ext_list_ops_list)
@@ -576,6 +611,7 @@ BTF_ID(func, bpf_cache_ext_list_iterate)
 BTF_ID(func, bpf_cache_ext_list_sample)
 BTF_ID(func, bpf_cache_ext_list_move)
 BTF_ID(func, bpf_cache_ext_list_iterate_extended)
+BTF_ID(func, bpf_cache_ext_get_sched)
 
 noinline bool cache_ext_is_callback_calling_kfunc_iterate(u32 btf_id)
 {
