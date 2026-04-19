@@ -12,6 +12,9 @@
 #include <linux/btf.h>
 #include <linux/sort.h>
 #include <linux/sched.h>
+
+// hack
+#define account_group_exec_runtime(...)
 #include "../kernel/sched/sched.h"
 
 /******************************************************************************
