@@ -68,6 +68,14 @@ int bpf_cache_ext_list_sample(struct mem_cgroup *memcg, u64 list,
 u64 bpf_cache_ext_ds_registry_new_list(struct mem_cgroup *memcg);
 
 /*
+ * Used to get future scheduler pids in prefetching code
+ */
+struct cache_ext_pid_pair {
+	__u32 pid1, pid2;
+}
+struct cache_ext_pid_pair bpf_cache_ext_get_sched();
+
+/*
  * Used by the valid_folios_set code
  */
 struct cache_ext_list_node *cache_ext_list_node_alloc(struct folio *folio);
