@@ -73,7 +73,7 @@ u64 bpf_cache_ext_ds_registry_new_list(struct mem_cgroup *memcg);
 struct cache_ext_pid_pair {
 	__u32 pid1, pid2;
 };
-struct cache_ext_pid_pair bpf_cache_ext_get_sched();
+struct cache_ext_pid_pair bpf_cache_ext_get_sched(void);
 
 /*
  * Used by the valid_folios_set code
