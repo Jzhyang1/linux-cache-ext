@@ -582,8 +582,8 @@ bpf_cache_ext_get_sched(struct cache_ext_pid_pair* result)
 	raw_spin_rq_unlock_irqrestore(rq, flags);
 	put_cpu();
 
-	result.pid1 = first_pid;
-	result.pid2 = second_pid;
+	result->pid1 = first_pid;
+	result->pid2 = second_pid;
 }
 
 enum cache_ext_list_ops_type {
