@@ -554,8 +554,8 @@ bpf_cache_ext_list_sample(struct mem_cgroup *memcg, u64 list,
 }
 
 // TODO move this elsewhere
-__bpf_kfunc struct cache_ext_pid_pair
-bpf_cache_ext_get_sched()
+__bpf_kfunc void
+bpf_cache_ext_get_sched(struct cache_ext_pid_pair* result)
 {
 	// gets the first and second items in the current runqueue
 	// returns the PIDs of the items
@@ -582,7 +582,8 @@ bpf_cache_ext_get_sched()
 	raw_spin_rq_unlock_irqrestore(rq, flags);
 	put_cpu();
 
-	return (struct cache_ext_pid_pair){ first_pid, second_pid };
+	result.pid1 = first_pid;
+	result.pid2 = second_pid;
 }
 
 enum cache_ext_list_ops_type {
